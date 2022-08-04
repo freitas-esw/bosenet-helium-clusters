@@ -43,7 +43,7 @@ def init_particles(
     array (batch_size,nparticles*ndim) of initial random positions.
   """
   key, subkey = jax.random.split(key)
-  a = init_width * 2.0 * jnp.float(nparticles)**(1.0/3.0)
+  a = init_width * 2.0 * float(nparticles)**(1.0/3.0)
   positions = a * jax.random.normal( subkey, shape=(batch_size,nparticles*ndim) )
 
   return positions

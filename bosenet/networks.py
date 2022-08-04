@@ -161,13 +161,21 @@ def gaussian_envelope(r, params):
   return env.squeeze(1) 
 
 
-def mcmillan_envelope( dr, params ):
+def mcmillan_envelope(dr, params):
   """
   """
   odr = (1.0 - jnp.eye(dr.shape[0])) / (dr + jnp.eye(dr.shape[0]))
   odr = jnp.triu( odr, k=1 ) 
   env = -jnp.abs(jnp.sum( odr**5 )*params)
   return env
+
+
+def hardsphere_envelope(dr):
+  """
+  """
+  cond = dr + jnp.eye(dr.shape[0]) < 0.8
+  env = jnp.where(cond, -jnp.inf, 0.0)
+  return jnp.sum(env)
 
 
 def bosenet_orbital(params, x):
@@ -183,7 +191,7 @@ def bosenet_orbital(params, x):
 
   orbitals = neural_network(h_one, h_two, params)
 
-  mcmillan = mcmillan_envelope(dr, jnp.ones(1)*0.50)
+  mcmillan = mcmillan_envelope(dr, jnp.ones(1)*0.50) + hardsphere_envelope(dr)
 
   return orbitals, envelope, mcmillan
 

@@ -1,0 +1,74 @@
+
+"""Metropolis-Hastings Monte Carlo.
+
+NOTE: these functions operate on batches of MCMC configurations and should not
+be vmapped.
+"""
+
+from bosenet import constants
+import jax
+from jax import lax
+from jax import numpy as jnp
+
+
+def mh_update(
+    params,
+    f,
+    x1,
+    key,
+    lp_1,
+    num_accepts,
+    stddev=0.02
+):
+  """ Performs one Metropolis-Hastings step using an all-electron move
+    
+  Args:
+
+  Returns:
+    ( x, key, lp, num_accepts )
+  """
+  key, subkey = jax.random.split(key)
+  x2 = x1 + stddev * jax.random.normal( subkey, shape=x1.shape )
+  lp_2 = 2. * f( params, x2 )
+  ratio = lp_2 - lp_1
+
+  key, subkey = jax.random.split(key)
+  rnd = jnp.log( jax.random.uniform( subkey, shape=lp_1.shape ) )
+  cond = ratio > rnd
+  x_new = jnp.where( cond[...,None], x2, x1 )
+  lp_new = jnp.where( cond, lp_2, lp_1 )
+  num_accepts += jnp.sum(cond)
+
+  return x_new, key, lp_new, num_accepts
+
+
+def make_mcmc_step(
+    batch_network,
+    batch_per_device,
+    steps=10
+):
+  """ Creates the MCMC step function.
+
+  Args:
+  """
+
+  @jax.jit
+  def mcmc_step(params, data, key, width):
+    """ Performs a set of MCMC steps.
+    Args:
+    Returns:
+    """
+
+    def step_fn(i, x):
+      return mh_update(params, batch_network, *x, stddev=width)
+
+    logprob = 2.*batch_network(params, data)
+    data, key, _, num_accepts = lax.fori_loop(0, steps, step_fn,
+                                               (data, key, logprob, 0.))
+    pmove = jnp.sum(num_accepts) / (steps*batch_per_device)
+    pmove = constants.pmean(pmove)
+
+    return data, pmove
+
+  return mcmc_step
+

@@ -5,7 +5,7 @@ NOTE: these functions operate on batches of MCMC configurations and should not
 be vmapped.
 """
 
-from bosenet import constants
+from bhc import constants
 import jax
 from jax import lax
 from jax import numpy as jnp
@@ -23,9 +23,20 @@ def mh_update(
   """ Performs one Metropolis-Hastings step using an all-electron move
     
   Args:
+    params: variational parameters
+    f: function with signature f(params, x) that computes the log of wave function
+    x1: current set of particles positions
+    key: RNG state
+    lp_1: current log probabilities of f evaluated at x1
+    num_accepts: number of accepted trial moves
+    stddev: width of Gaussian move proposal 
 
   Returns:
-    ( x, key, lp, num_accepts )
+    ( x, key, lp, num_accepts ), where:
+      x: Updated set of particle positions
+      key: RNG state
+      lp: function f evaluated at x
+      num_accepts: updated total number of accepted moves
   """
   key, subkey = jax.random.split(key)
   x2 = x1 + stddev * jax.random.normal( subkey, shape=x1.shape )
@@ -50,13 +61,24 @@ def make_mcmc_step(
   """ Creates the MCMC step function.
 
   Args:
+    batch_network: vectorised function that computes the log wave function
+    batch_per_device: batch size per device
+    steps: number of trial moves to attempt
   """
 
   @jax.jit
   def mcmc_step(params, data, key, width):
     """ Performs a set of MCMC steps.
+    
     Args:
+      params: set of variational parameters
+      data: set of particle positions
+      key: RNG key
+      width: standard deviation for move proposals
+
     Returns:
+      (data, pmove): data is the updated positions and pmove the average 
+                     probability a move was accepted
     """
 
     def step_fn(i, x):

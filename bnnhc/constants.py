@@ -14,6 +14,5 @@ PMAP_AXIS_NAME = 'qmc_pmap_axis'
 pmap = functools.partial(jax.pmap, axis_name=PMAP_AXIS_NAME)
 
 # Shortcut for kfac utils
-psum = functools.partial(kfac_utils.psum_if_pmap, axis_name=PMAP_AXIS_NAME)
 pmean = functools.partial(kfac_utils.pmean_if_pmap, axis_name=PMAP_AXIS_NAME)
 

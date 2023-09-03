@@ -1,0 +1,11 @@
+
+jax==0.2.28
+jaxlib==0.1.75
+git+https://github.com/deepmind/deepmind_research#subdirectory=kfac_ferminet_alpha
+
+chex==0.1.0
+ml_collections>=0.1.1
+tables>=3.8.0
+
+matplotlib
+pandas

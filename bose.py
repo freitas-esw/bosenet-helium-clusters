@@ -1,11 +1,11 @@
 
-"""Main wrapper for BoseNet in JAX."""
+"""Main wrapper for Bosonic Neural Networks - Helium Clusters (BNN-HC) in JAX."""
 
 from absl import app
 from absl import flags
 from absl import logging
-from bosenet import base_config
-from bosenet import train
+from bnnhc import base_config
+from bnnhc import train
 from ml_collections.config_flags import config_flags
 
 from jax.config import config

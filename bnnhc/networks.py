@@ -1,9 +1,9 @@
 
-"""Implementation of Bosonic Neural Network in JAX."""
+"""Implementation of Bosonet Helium Cluster Neural Network in JAX."""
 
 from typing import Tuple
 
-from bosenet import curvature_tags_and_blocks
+from bhc import curvature_tags_and_blocks
 
 import jax
 import jax.numpy as jnp
@@ -17,11 +17,19 @@ def init_bosenet_params(
     dim: int = 3,
     num_orbitals: int = 8
 ):
-  """
+  """ Creates the initial set of variational parameters
+
+  Args:
+    key: RNG key
+    hidden_dims: neural networks architecture 
+         (sizes of each stream for each layer)
+    np: number of particles
+    dim: number of spatial dimensions
+    num_orbitals: number of symmetric functions 
   """
   
-  in_dim   = 3*(dim+1)
-  dims_in  = ( [in_dim]+[ 2*hdim[0]+hdim[1] for hdim in hidden_dims ] )
+  in_dim   = 2*(dim+1)
+  dims_in  = ( [in_dim]+[ hdim[0]+hdim[1] for hdim in hidden_dims ] )
   dims_out = [ hdim[0] for hdim in hidden_dims ] 
   dims_two = [dim+1] + [hdim[1] for hdim in hidden_dims]
   
@@ -33,8 +41,10 @@ def init_bosenet_params(
       'omega': [],
   }
 
+  # Exponential decay factors
   params['envelope']['a'] = 0.10*jnp.ones(shape=(np*num_orbitals))
 
+  # Neural networks weights and biases
   for i in range(len(hidden_dims)):
 
     key, subkey = jax.random.split(key)
@@ -56,6 +66,7 @@ def init_bosenet_params(
     params['double'][i]['b'] = jax.random.normal(subkey, shape=shape)
 
 
+  # Output layer weights and biases
   key, subkey = jax.random.split(key)
   shape = ( dims_in[-1], np*num_orbitals )
   scale = jnp.sqrt(float(dims_in[-1]))
@@ -65,6 +76,7 @@ def init_bosenet_params(
   shape = ( np*num_orbitals, )
   params['orbital']['b'] = jax.random.normal(subkey, shape=shape)
 
+  # Linear combinations coefficients
   key, subkey = jax.random.split(key)
   params['omega'] = jax.random.normal( subkey, shape=(num_orbitals,) )
   
@@ -75,19 +87,22 @@ def construct_input_features(
     x: jnp.ndarray,
     dim: int = 3 
 ) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
-  """
+  """ Construct the input features f^0_i of the network for each 
+      particle i
+
   Args:
-    x (np*dim)
+    x: array with a set of particles positions [shape->(np*dim)]
       
   Returns:
-    p  (np,dim)
-    r  (np,1)
-    pp (np,np,dim)
-    dr (np,np,1)
+    p: array of coordinates relative to the center of mass [shape->(np,dim)]
+    r: array of distance to the center of mass [shape->(np,1)]
+    pp: matrix of relative coordinates for each dimension [shape->(np,np,dim)]
+    dr: matrix of relative distances [shape->(np,np,1)]
   """
-
-  p = jnp.reshape(x, [-1, 1, dim])
-  r = jnp.linalg.norm(p, axis=2, keepdims=True)
+  
+  p = jnp.reshape(x, [-1, dim])
+  p = p - jnp.mean(p, axis=0, keepdims=True)
+  r = jnp.linalg.norm(p, axis=-1, keepdims=True)
 
   pp = (
     jnp.reshape(x, [1, -1, dim]) - jnp.reshape(x, [-1, 1, dim]) )
@@ -101,15 +116,20 @@ def construct_input_features(
 
 
 def construct_symmetric_features(h_one, h_two):
-  """
+  """ Construct the symmetric features using a crossover
+      information from the single-atom and two-atom streams.
+
+  Args: 
+    h_one: single-atom stream
+    h_two: two-atom stream 
+
+  Returns: symmetric features for each particle  
   """
 
-  g_one = [ jnp.mean( h_one, axis=0, keepdims=True ) ]
-  g_one = [ jnp.tile( *g_one, [h_one.shape[0],1] ) ]
-
+  g_one = jnp.mean( h_one, axis=0, keepdims=True )
   g_two = [ jnp.mean( h_two, axis=0 ) ]
 
-  return jnp.concatenate([h_one]+g_one+g_two, axis=1)
+  return jnp.concatenate([h_one-g_one]+g_two, axis=1)
 
 
 def linear_layer(x, w, b=None):
@@ -132,8 +152,16 @@ vmap_linear_layer = jax.vmap(linear_layer, in_axes=(0, None, None), out_axes=0)
 
 
 def neural_network(h_one, h_two, params):
+  """ Computes the feedforward neural network outputs.
+
+  Args:
+    h_one: single-atom input stream
+    h_two: two-atom input stream
+    params: variational parameters
+
+  Returns: neural networks outputs
   """
-  """
+
   residual = lambda x, y: (x + y) / jnp.sqrt(2.0) if x.shape == y.shape else y
   for i in range(len(params['single'])):
     h_one_in = construct_symmetric_features(h_one, h_two) 
@@ -155,14 +183,28 @@ def neural_network(h_one, h_two, params):
 
 
 def gaussian_envelope(r, params):
-  """
+  """ Computes the exponential decay as the 
+      asymptotic behaviour for r going to infinity
+
+  Args: 
+    r: distances to the center of mass of each particle
+    params: variational decay parameters
+
+  Returns: log of the gaussian envelope for each combination of
+           a particle-parameter
   """
   env = -jnp.abs(r**2*params)
-  return env.squeeze(1) 
+  return env
 
 
 def mcmillan_envelope(dr, params):
-  """
+  """ Computes the McMillan envelope of the Ansatz
+
+  Args:
+    r: relative distances for each pair of particles
+    params: McMillan parameter (fixed)
+
+  Returns: log of the McMillan envelope
   """
   odr = (1.0 - jnp.eye(dr.shape[0])) / (dr + jnp.eye(dr.shape[0]))
   odr = jnp.triu( odr, k=1 ) 
@@ -171,36 +213,88 @@ def mcmillan_envelope(dr, params):
 
 
 def hardsphere_envelope(dr):
+  """ Computes a very low log probability (virtually zero) if at least one
+      pair of particles are closer than a fixed treshold.
+  
+  Args:
+    r: relative distances for each pair of particles
   """
-  """
-  cond = dr + jnp.eye(dr.shape[0]) < 0.8
-  env = jnp.where(cond, -jnp.inf, 0.0)
-  return jnp.sum(env)
+ # cutoff = 0.6 - dr - jnp.eye(dr.shape[0])
+  cutoff = 0.64 - dr - jnp.eye(dr.shape[0])
+  return -1e20*jnp.sum(jnp.heaviside(cutoff, 0.5))
 
 
 def bosenet_orbital(params, x):
-  """
-  """
-  v, r, pp, dr = construct_input_features(x)
+  """ Computes the network outputs and envelopes to
+      construct the symmetric functions
 
-  h_one = jnp.concatenate((r,v), axis=2)               # Shape (np,1,dim+1)
-  h_one = jnp.reshape(h_one, [jnp.shape(r)[0], -1])    # Shape (np,dim+1)
-  h_two = jnp.concatenate((dr[...,None], pp), axis=2)  # Shape (np,np,dim+2)
+  Args: 
+    params: variational parameters
+    x: set of particle positions
+
+  Returns: 
+    orbital: NN outputs
+    envelopes: log gaussian decays
+  """
+  v, r, pp, dr = x 
+
+  h_one = jnp.concatenate((r,v), axis=-1)
+  h_two = jnp.concatenate((dr[...,None], pp), axis=-1)
 
   envelope = gaussian_envelope(r, params['envelope']['a'])
 
   orbitals = neural_network(h_one, h_two, params)
 
-  mcmillan = mcmillan_envelope(dr, jnp.ones(1)*0.50) + hardsphere_envelope(dr)
-
-  return orbitals, envelope, mcmillan
+  return orbitals, envelope
 
 
 def bosenet(params, x):
+  """ Computes the log of the trial wave function.
+
+  Args: 
+    params: variational parameters
+    x: set of particle positions
   """
-  Returns ln psi
+  
+  f = construct_input_features(x)
+
+  mcm = mcmillan_envelope(f[-1], jnp.ones(1)*0.50) + hardsphere_envelope(f[-1])
+  
+  orb, env = bosenet_orbital(params, f)
+
+  n = orb.shape[0]
+
+  #Suposses that orb>0, since orb=sigmoid(h)
+  logphi = jnp.reshape(jnp.log(orb)+env, [n,n,-1])
+
+  maxlogphi = jnp.max(logphi, axis=1, keepdims=True)
+
+  phibar = jnp.exp(logphi-maxlogphi)
+  chibar = jnp.prod(jnp.sum(phibar, axis=1), axis=0)
+
+  logchi = jnp.sum(maxlogphi, axis=(0,1))+jnp.log(chibar)
+  maxlogchi = jnp.max(logchi)
+
+  zeta = params['omega']*jnp.exp(logchi-maxlogchi)
+
+  logprob = mcm[0] + maxlogchi + jnp.log(jnp.abs(jnp.sum(zeta)))
+
+  return logprob
+
+
+def bosenet_vmc(params, x):
+  """ Computes the log of the trial wave function for VMC simulations.
+
+  Args: 
+    params: variational parameters
+    x: set of particle positions
   """
-  orb, env, mcm = bosenet_orbital(params, x)
+
+  f = construct_input_features(x)
+
+  mcm = mcmillan_envelope(f[-1], jnp.ones(1)*0.50)
+  
+  orb, env = bosenet_orbital(params, f)
 
   n = orb.shape[0]
 

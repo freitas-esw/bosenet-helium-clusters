@@ -144,3 +144,17 @@ def restore(restore_filename: str, batch_size: Optional[int] = None):
           'Wrong batch size in loaded data. Expected {}, found {}.'.format(
               batch_size, data.shape[0] * data.shape[1]))
   return t, data, params, opt_state, mcmc_width
+
+
+def restore_params(restore_filename: str):
+  """Restores data saved in a checkpoint.
+  """
+  logging.info('Loading checkpoint %s', restore_filename)
+  with open(restore_filename, 'rb') as f:
+    ckpt_data = np.load(f, allow_pickle=True)
+    # Retrieve data from npz file. Non-array variables need to be converted back
+    # to natives types using .tolist().
+    params = ckpt_data['params'].tolist()
+    mcmc_width = jnp.array(ckpt_data['mcmc_width'].tolist())
+    data = ckpt_data['data']
+  return data, params, mcmc_width

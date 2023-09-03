@@ -1,5 +1,5 @@
 
-from bhc import base_config
+from bnnhc import base_config
 
 
 def get_config():

@@ -17,13 +17,13 @@ For more information visit: https://docs.python.org/3/library/venv.html
 First, to create the environment use:
 
 ```shell
-python3.10 -m venv ./venv/bhc
+python3.10 -m venv ./venv/bnnhc
 ```
 
 To activate the environment
 
 ```shell
-source ./venv/bhc/bin/activate
+source ./venv/bnnhc/bin/activate
 ```
 
 The versions specified in the requiriments file are the ones that the tests were performed, change it carefully.
@@ -42,7 +42,7 @@ pip install jaxlib==0.1.75+cuda11.cudnn82 -f https://storage.googleapis.com/jax-
 ## Usage
 
 The example config file is under the `scripts` directory. To see what kind of parameters you can change,
-you should look into the `input.py` file or the `bhc/base_config.py` file. Running the codes looks like:
+you should look into the `input.py` file or the `bnnhc/base_config.py` file. Running the codes looks like:
 
 ```shell
 python3.10 bose.py --config scripts/he02n/input.py

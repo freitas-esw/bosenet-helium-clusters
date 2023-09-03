@@ -13,7 +13,7 @@ def default() -> ml_collections.ConfigDict:
   Returns:
     ml_collections.ConfigDict containing default settings.
   """
-  # wavefunction output.
+  
   cfg = ml_collections.ConfigDict({
       'batch_size': 8192,  # batch size
 
@@ -23,13 +23,12 @@ def default() -> ml_collections.ConfigDict:
       'config_module': __name__,
 
       'optim': {
-          'iterations': 200000,   # number of iterations
+          'iterations': 10000,   # number of iterations
           'lr': {
               'rate': 1.e-4,     # learning rate
               'decay': 1.0,      # exponent of learning rate decay
               'delay': 10000.0,  # term that sets the scale of the rate decay
           },
-          'clip_el': 0.0,        # if not none, scale at which to clip local energy
           
           # KFAC hyperparameters. See KFAC documentation for details.
           'kfac': {
@@ -50,7 +49,7 @@ def default() -> ml_collections.ConfigDict:
 
       'log': {
           'stats_frequency': 1,    # iterations between logging of stats
-          'save_frequency': 20000, # steps between saving network params
+          'save_frequency': 10000, # steps between saving network params
           'save_path': '',         # path to save/restore network to/from
           'restore_path': '',      # path containing checkpoint to restore network from
       },
@@ -63,13 +62,13 @@ def default() -> ml_collections.ConfigDict:
       'mcmc': {
           'burn_in': 100,        # number of burn in steps before optimization
           'steps': 10,           # number of MCMC steps to make between network updates
-          'init_width': 1.20,    # width of Gaussian used to generate initial configurations
+          'init_width': 5.00,    # width of Gaussian used to generate initial configurations
           'width': 0.10,         # width of Gaussian used for random moves step size for
           'adapt_frequency': 25, # number of steps after which to update the MCMC step size
       },
 
       'network': { 
-         'hidden_dims': ((256,32),(256,32),(256,32),(256,32)),
+         'hidden_dims': ((128,16),(128,16),(128,16),(128,16)),
          'orbitals': 16,
       },
 

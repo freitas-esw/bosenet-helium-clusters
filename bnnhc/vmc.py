@@ -12,14 +12,14 @@ import jax.numpy as jnp
 
 import numpy as np
 
-from bhc import checkpoint
-from bhc import constants
-from bhc import networks
-from bhc import mcmc
-from bhc import hamiltonian
-from bhc import writers
+from bnnhc import checkpoint
+from bnnhc import constants
+from bnnhc import networks
+from bnnhc import mcmc
+from bnnhc import hamiltonian
+from bnnhc import writers
 
-from bhc.train import AuxiliaryLossData, make_loss
+from bnnhc.train import AuxiliaryLossData, make_loss
 
 from kfac_ferminet_alpha import utils as kfac_utils
 

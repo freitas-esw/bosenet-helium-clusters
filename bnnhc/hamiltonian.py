@@ -1,7 +1,7 @@
 
 """Evaluating the Hamiltonian on a wavefunction."""
 
-from bhc import networks
+from bnnhc import networks
 import jax
 from jax import lax
 import jax.numpy as jnp

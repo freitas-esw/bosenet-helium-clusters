@@ -3,7 +3,7 @@
 
 from typing import Tuple
 
-from bhc import curvature_tags_and_blocks
+from bnnhc import curvature_tags_and_blocks
 
 import jax
 import jax.numpy as jnp

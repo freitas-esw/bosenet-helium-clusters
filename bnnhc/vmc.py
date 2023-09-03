@@ -1,8 +1,9 @@
 
-"""Single variational MC loop for BoseNet in JAX."""
+"""Single variational MC loop for BHC in JAX."""
 
 from absl import logging
 
+import time
 import chex
 import ml_collections
 
@@ -11,110 +12,28 @@ import jax.numpy as jnp
 
 import numpy as np
 
-from bosenet import checkpoint
-from bosenet import constants
-from bosenet import networks
-from bosenet import mcmc
-from bosenet import hamiltonian
-from bosenet.utils import writers
+from bhc import checkpoint
+from bhc import constants
+from bhc import networks
+from bhc import mcmc
+from bhc import hamiltonian
+from bhc import writers
+
+from bhc.train import AuxiliaryLossData, make_loss
 
 from kfac_ferminet_alpha import utils as kfac_utils
 
 
-def init_particles(
-        key,
-        nparticles: int,
-        ndim: int,
-        batch_size: int,
-        init_width: float
-) -> jnp.ndarray:
-  """ Initializes particles positions 
-
-  Args:
-    key: JAX RNG state
-    nparticles: Number of particles 
-    ndim: Number of dimensions
-    batch_size: Total number of MCMC configurations to generate
-
-  Returns:
-    array (batch_size,nparticles*ndim) of initial random positions.
-  """
-  key, subkey = jax.random.split(key)
-  positions = init_width * nparticles * jax.random.normal( subkey, shape=(batch_size,nparticles*ndim) )
-
-  return positions
-
-
-@chex.dataclass
-class AuxiliaryLossData:
-    """Auxiliary data returned by total_energy.
-
-    Attributes:
-      kinetic: mean kinetic energy over batch
-      potential: mean potential energy over batch
-      local_energy: local energy for each MCMC configuration
-      variance: mean variance over batch
-    """
-    kinetic: jnp.DeviceArray
-    potential: jnp.DeviceArray
-    local_energy: jnp.DeviceArray
-    variance: jnp.DeviceArray
-
-
-def make_loss(network, batch_network, clip_local_energy=0.0):
-  """ Creates the loss function, including custom gradients.
-
-  Args:
-
-  Returns:
-  """
-  el_fun = hamiltonian.local_energy(network)
-  batch_local_energy = jax.vmap(el_fun, in_axes=(None, 0), out_axes=0)
-
-  @jax.custom_jvp
-  def total_energy(params, data):
-    """ Evaluates the total energy of the network for a batch of configurations.
-
-    Args:
-    Returns:
-    """
-    e_l, kin, pot = batch_local_energy(params, data)
-    k = constants.pmean(jnp.mean(kin)) 
-    p = constants.pmean(jnp.mean(pot)) 
-    loss = constants.pmean(jnp.mean(e_l)) 
-    variance = constants.pmean(jnp.mean((e_l-loss)**2))
-    return loss, AuxiliaryLossData(kinetic=k, potential=p, variance=variance, local_energy=e_l)
-
-  @total_energy.defjvp
-  def total_energy_jvp(primals, tangents):  # pylint: disable=unused-variable
-    """ Custom Jacobian-vector product for unbiased local energy gradients. """
-    params, data = primals
-    loss, aux_data = total_energy(params, data)
-
-    if clip_local_energy > 0.0:
-      tv = jnp.mean(jnp.abs(aux_data.local_energy-loss))
-      tv = constants.pmean(tv)
-      diff = jnp.clip(aux_data.local_energy,
-                      loss-clip_local_energy*tv,
-                      loss+clip_local_energy*tv) - loss
-    else:
-      diff = aux_data.local_energy - loss
-
-    psi_primal, psi_tangent = jax.jvp(batch_network, primals, tangents)
-    loss_functions.register_normal_predictive_distribution(psi_primal[:,None])
-    primals_out = loss, aux_data
-    tangents_out = (jnp.dot(psi_tangent, diff), aux_data)
-
-    return primals_out, tangents_out
-
-  return total_energy
-
-
 def vmc(cfg: ml_collections.ConfigDict):
-  """
+  """ Runs the VMC simulation in order to compute the
+      main estimations of observables.
+
+  Args:
+    cfg: ConfigDict containing all necessary parameters to run the simulation.
+         Check base_config.py for more details.
   """
 
-  logging.info('Welcome to BoseNet simulations of clusters!')
+  logging.info('Welcome to Bosenet Helium Cluster VMC simulation!')
 
   # Device logging
   num_devices = jax.device_count()
@@ -139,41 +58,24 @@ def vmc(cfg: ml_collections.ConfigDict):
   logging.info('RNG seed: %i', seed)
 
 
-  # Create parameters, network, and vmapped/pmapped derivations
-  key, subkey = jax.random.split(key)
-  params = networks.init_bosenet_params(subkey, 
-          cfg.network.hidden_dims, 
-          np=cfg.system.np,
-          dim=cfg.system.dim,
-          num_orbitals=cfg.network.orbitals)
-  params = kfac_utils.replicate_all_local_devices(params)
-  batch_network = jax.vmap(networks.bosenet, (None, 0), 0)
-  
-
-# Restore params/data if necessary
-
-  ckpt_save_path = checkpoint.create_save_path(cfg.log.save_path)
+  # Restore params/data
+  if not cfg.log.restore_path:
+    raise ValueError('Restore path not provided!')
   ckpt_restore_path = checkpoint.get_restore_path(cfg.log.restore_path)
-
-  ckpt_restore_filename = (
-      checkpoint.find_last_checkpoint(ckpt_save_path) or
-      checkpoint.find_last_checkpoint(ckpt_restore_path))
+  ckpt_restore_filename = checkpoint.find_last_checkpoint(ckpt_restore_path)
+  ckpt_save_path = ckpt_restore_path
 
   if ckpt_restore_filename:
-    t_init, _, params, _, mcmc_width_ckpt = checkpoint.restore(
-        ckpt_restore_filename, cfg.batch_size)
+    data, params, mcmc_width_ckpt = checkpoint.restore_params(ckpt_restore_filename)
+    mcmc_width_ckpt = kfac_utils.replicate_all_local_devices(mcmc_width_ckpt[0,...])
+    params = jax.tree_map(lambda x: x[0,...], params)
+    params = kfac_utils.replicate_all_local_devices(params)
   else:
     logging.info('No checkpoint found. Stopping the simulation.')
     raise SystemExit
 
   key, subkey = jax.random.split(key)
-  data = init_particles(
-      subkey, 
-      cfg.system.np, 
-      cfg.system.dim, 
-      cfg.batch_size, 
-      cfg.mcmc.init_width)
-  data = jnp.reshape(data, data_shape + data.shape[1:])
+  data = jnp.reshape(data, data_shape[0:] + data.shape[2:])
   data = kfac_utils.broadcast_all_local_devices(data)
   t_init = 0
 
@@ -186,7 +88,10 @@ def vmc(cfg: ml_collections.ConfigDict):
   sharded_key = kfac_utils.make_different_rng_key_on_all_devices(key)
 
 
-  # Main training
+  # Main VMC simulation
+
+  # Use the wave function without the cutoff
+  batch_network = jax.vmap(networks.bosenet_vmc, (None, 0), 0)
 
   # Construct MCMC step
   mcmc_step = mcmc.make_mcmc_step(
@@ -197,7 +102,7 @@ def vmc(cfg: ml_collections.ConfigDict):
 
 
   # Construct total energy
-  total_energy = make_loss(networks.bosenet, batch_network)
+  total_energy = make_loss(networks.bosenet_vmc, batch_network)
   total_energy = constants.pmap(total_energy)
 
 
@@ -211,15 +116,6 @@ def vmc(cfg: ml_collections.ConfigDict):
     mcmc_width = kfac_utils.replicate_all_local_devices(
         jnp.asarray(cfg.mcmc.width))
   
-
-  if t_init == 0:
-    logging.info('Burning in MCMC chain for %d steps', cfg.mcmc.burn_in)
-    for t in range(cfg.mcmc.burn_in):
-      sharded_key, subkeys = kfac_utils.p_split(sharded_key)
-      data, pmove = mcmc_step(params, data, subkeys, mcmc_width)
-    logging.info('Completed burn-in MCMC steps')
-    logging.info('Initial energy: %03.4f K', total_energy(params, data)[0][0])
-
 
   with writers.Writer(
       name='vmc_stats',
@@ -241,11 +137,11 @@ def vmc(cfg: ml_collections.ConfigDict):
       pmove = pmove[0]
 
       # Update MCMC move width
-      if t < cfg.vmc.iterations // 2:
-        if pmove > 0.55:
-          mcmc_width *= 1.1
-        elif pmove < 0.45:
-          mcmc_width /= 1.1
+      #if t < cfg.vmc.iterations // 2:
+      #  if pmove > 0.55:
+      #    mcmc_width *= 1.1
+      #  elif pmove < 0.45:
+      #    mcmc_width /= 1.1
 
 
       # Logging

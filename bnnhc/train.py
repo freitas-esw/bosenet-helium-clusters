@@ -1,5 +1,5 @@
 
-"""Core training loop for neural QMC in JAX."""
+"""Core training loop for BHC-NN QMC in JAX."""
 
 import time
 
@@ -12,12 +12,12 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from bosenet import checkpoint
-from bosenet import constants
-from bosenet import networks
-from bosenet import mcmc
-from bosenet import hamiltonian
-from bosenet.utils import writers
+from bhc import checkpoint
+from bhc import constants
+from bhc import networks
+from bhc import mcmc
+from bhc import hamiltonian
+from bhc import writers
 
 from kfac_ferminet_alpha import loss_functions
 from kfac_ferminet_alpha import utils as kfac_utils
@@ -31,19 +31,19 @@ def init_particles(
         batch_size: int,
         init_width: float
 ) -> jnp.ndarray:
-  """ Initializes particles positions 
+  """ Initializes particles positions.
 
   Args:
     key: JAX RNG state
-    nparticles: Number of particles 
-    ndim: Number of dimensions
-    batch_size: Total number of MCMC configurations to generate
+    nparticles: number of particles 
+    ndim: number of spatial dimensions
+    batch_size: total number of configurations to generate
 
   Returns:
-    array (batch_size,nparticles*ndim) of initial random positions.
+    array (batch_size, nparticles*ndim) of initial random positions.
   """
   key, subkey = jax.random.split(key)
-  a = init_width * 2.0 * float(nparticles)**(1.0/3.0)
+  a = init_width * float(nparticles)**(1.0/3.0)
   positions = a * jax.random.normal( subkey, shape=(batch_size,nparticles*ndim) )
 
   return positions
@@ -65,12 +65,16 @@ class AuxiliaryLossData:
     variance: jnp.DeviceArray
 
 
-def make_loss(network, batch_network, clip_local_energy=0.0):
+def make_loss(network, batch_network):
   """ Creates the loss function, including custom gradients.
 
   Args:
+    network: function that computes the log trial wave function for a single
+             set of particle positions
+    batch_network: same as network but for a batch of set of positions
 
   Returns:
+    total_energy: function that estimates the total energy through MC integration
   """
   el_fun = hamiltonian.local_energy(network)
   batch_local_energy = jax.vmap(el_fun, in_axes=(None, 0), out_axes=0)
@@ -80,7 +84,13 @@ def make_loss(network, batch_network, clip_local_energy=0.0):
     """ Evaluates the total energy of the network for a batch of configurations.
 
     Args:
+      params: variational parameters
+      data: a batch of a set of particles positions
+
     Returns:
+      loss: total energy estimation
+      aux_data: estimated kinetic and potential energies, as well as the local energies and
+                the total energy variance
     """
     e_l, kin, pot = batch_local_energy(params, data)
     k = constants.pmean(jnp.mean(kin)) 
@@ -92,18 +102,12 @@ def make_loss(network, batch_network, clip_local_energy=0.0):
   @total_energy.defjvp
   def total_energy_jvp(primals, tangents):  # pylint: disable=unused-variable
     """ Custom Jacobian-vector product for unbiased local energy gradients. """
+    
     params, data = primals
     loss, aux_data = total_energy(params, data)
 
-    if clip_local_energy > 0.0:
-      tv = jnp.mean(jnp.abs(aux_data.local_energy-loss))
-      tv = constants.pmean(tv)
-      diff = jnp.clip(aux_data.local_energy,
-                      loss-clip_local_energy*tv,
-                      loss+clip_local_energy*tv) - loss
-    else:
-      diff = aux_data.local_energy - loss
-
+    diff = aux_data.local_energy - loss
+    
     psi_primal, psi_tangent = jax.jvp(batch_network, primals, tangents)
     loss_functions.register_normal_predictive_distribution(psi_primal[:,None])
     primals_out = loss, aux_data
@@ -115,7 +119,12 @@ def make_loss(network, batch_network, clip_local_energy=0.0):
 
 
 def train(cfg: ml_collections.ConfigDict):
-  """
+  """ Runs the main simulation in order to optimise the
+      variational parameters.
+
+  Args:
+    cfg: ConfigDict containing all necessary parameters to run the simulation.
+         Check base_config.py for more details.
   """
 
   logging.info('Welcome to BoseNet simulations of clusters!')
@@ -200,8 +209,7 @@ def train(cfg: ml_collections.ConfigDict):
 
 
   # Construct loss and optimizer
-  total_energy = make_loss( networks.bosenet, batch_network,
-                            clip_local_energy = cfg.optim.clip_el )
+  total_energy = make_loss( networks.bosenet, batch_network )
 
 
   # Compute the learning rate
@@ -210,7 +218,7 @@ def train(cfg: ml_collections.ConfigDict):
             (1.0 / (1.0+(t/cfg.optim.lr.delay))), cfg.optim.lr.decay)
 
 
-  # Differentiate wrt parameter (argument 0)
+  # Differentiate wrt parameters (argument 0)
   val_n_grad = jax.value_and_grad( total_energy, argnums=0, has_aux=True )
 
 
@@ -294,10 +302,10 @@ def train(cfg: ml_collections.ConfigDict):
 
       # Update MCMC move width
       if t > 0 and t % cfg.mcmc.adapt_frequency == 0:
-        if np.mean(pmoves) > 0.45:
-          mcmc_width *= 1.1
-        if np.mean(pmoves) < 0.4:
-          mcmc_width /= 1.1
+        if np.mean(pmoves) > 0.42:
+          mcmc_width *= 1.05
+        if np.mean(pmoves) < 0.38:
+          mcmc_width /= 1.05
         pmoves[:] = 0
       pmoves[t%cfg.mcmc.adapt_frequency] = pmove
 

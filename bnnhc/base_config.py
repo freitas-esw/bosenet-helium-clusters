@@ -55,8 +55,9 @@ def default() -> ml_collections.ConfigDict:
       },
 
       'system': {
-          'np': 3,   # Number of particles in system
-          'dim': 3,  # Number of system dimensions  
+          'np': 3,               # number of particles in system
+          'dim': 3,              # number of system dimensions 
+          'interaction': 'aziz', # select the interaction potential (either 'aziz' or 'lj')
       },
 
       'mcmc': {

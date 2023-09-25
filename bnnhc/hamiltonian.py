@@ -6,6 +6,19 @@ import jax
 from jax import lax
 import jax.numpy as jnp
 
+def potential_lj612(dr):
+  """
+  Computes the Lennard-Jones potential
+
+  Args: 
+    dr: relative distance between atoms
+  Returns:
+    pot: interaction potential value in Kelvin
+  """
+  # Potential parameters
+  _eps = 4.*10.22        
+  return _eps*( 1./dr**12 - 1./dr**6 )
+
 
 def potential_aziz87(dr):
   """ 
@@ -35,19 +48,16 @@ def potential_aziz87(dr):
   return pot
 
 
-def local_kinetic_energy(f):
-  r""" Creates a funciton for the local kinetic energy, -1/2 \nabla^2 ln |f|.
+def local_kinetic_energy(f, lmb):
+  r""" Creates a funciton for the local kinetic energy, -lmb/2 \nabla^2 ln |f|.
 
   Args:
     f: function that evaluates the logarithmic wavefunction
+    lmb: hbar^2 / ( 2 m l^2 k_B ) value in Kelvin
 
   Returns: function that evaluates the local kinetic energy
-           -1/2 \nabla^2 ln |f|
+           -lmb/2 \nabla^2 ln |f|
   """
-
-  # Kinetic energy pre-factor in Kelvin
-  # [hbar^2/(2 m L^2)]/kB for helium 4 mass and L=2.963 A
-  hho2m = 0.69021474872837763
 
   def _lapl_over_f(params, x):
     n = x.shape[0]
@@ -59,25 +69,12 @@ def local_kinetic_energy(f):
       primal, tangent = jax.jvp(grad_f_closure, (x,), (eye[i],))
       return val + primal[i]**2 + tangent[i]
 
-    return - hho2m * lax.fori_loop(0, n, _body_fun, 0.0)
+    return - lmb * lax.fori_loop(0, n, _body_fun, 0.0)
 
   return _lapl_over_f
 
 
-def potential_energy(dr, x_table, y_table):
-  """ Computes the potential energy for a pair distance given a table.
-
-  Args:
-    dr: relative distance for a pair of particles
-    x_table: table with values of distances 
-    y_table: table with potential values
-
-  Returns: Interpolation of the table for the dr value 
-  """
-  return jnp.interp(dr, x_table, y_table)
-
-
-def local_energy(f, ndim: int=3):
+def local_energy(f, pot_type: str='aziz'):
   """ Construct the table for the potential and creates a function 
       to evaluate the local energy.
 
@@ -90,9 +87,14 @@ def local_energy(f, ndim: int=3):
            set of variational parameters params and a single set 
            of particle positions
   """
-  ke = local_kinetic_energy(f)
-  xtable = jnp.linspace(0.50, 5.0, 4000)
-  ytable = potential_aziz87(xtable)
+
+  # Kinetic energy pre-factor in Kelvin
+  # [hbar^2/(2 m L^2)]/kB = 0.69021474872837763 for helium 4 mass and L=2.963 A
+  # [hbar^2/(2 m L^2)]/kB = 0.927525459         for helium 4 mass and L=2.556 A  
+  potential_energy = potential_aziz87 if pot_type == 'aziz' else potential_lj612
+  hho2m = 0.69021474872837763 if pot_type == 'aziz' else 0.927525459
+  
+  ke = local_kinetic_energy(f, hho2m)
 
   def _e_l(params, x):
     """ Computes the total local energy, potential and kinetic energy.
@@ -105,7 +107,7 @@ def local_energy(f, ndim: int=3):
       local energy, kinetic energy, potential energy
     """
     _, _, _, r = networks.construct_input_features(x)
-    potential = jnp.sum(jnp.triu(potential_energy(r,xtable,ytable), k=1))
+    potential = jnp.sum(jnp.triu(potential_energy(r), k=1))
     kinetic = ke(params, x)
         
     return potential+kinetic, kinetic, potential

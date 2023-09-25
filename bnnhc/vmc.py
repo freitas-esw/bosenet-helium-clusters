@@ -102,7 +102,7 @@ def vmc(cfg: ml_collections.ConfigDict):
 
 
   # Construct total energy
-  total_energy = make_loss(networks.bosenet_vmc, batch_network)
+  total_energy = make_loss(networks.bosenet_vmc, batch_network, cfg.system.interaction)
   total_energy = constants.pmap(total_energy)
 
 

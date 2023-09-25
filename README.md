@@ -70,3 +70,6 @@ The BNN-HC Ansatz is inspired in the FermiNet[2].
 
 [2] FermiNet github, James S. Spencer, David Pfau and FermiNet Contributors, http://github.com/deepmind/ferminet, 2020
 
+## Giving Credit
+
+If you want to use this code or your work is based/inspired by this code, please cite the associated paper mentioned in the beginning.

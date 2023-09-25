@@ -65,18 +65,19 @@ class AuxiliaryLossData:
     variance: jnp.DeviceArray
 
 
-def make_loss(network, batch_network):
+def make_loss(network, batch_network, pot_type='aziz'):
   """ Creates the loss function, including custom gradients.
 
   Args:
     network: function that computes the log trial wave function for a single
              set of particle positions
     batch_network: same as network but for a batch of set of positions
+    pot_type: which potential to use, either HFD-He (aziz) or Lennard-Jones (lj)
 
   Returns:
     total_energy: function that estimates the total energy through MC integration
   """
-  el_fun = hamiltonian.local_energy(network)
+  el_fun = hamiltonian.local_energy(network, pot_type)
   batch_local_energy = jax.vmap(el_fun, in_axes=(None, 0), out_axes=0)
 
   @jax.custom_jvp
@@ -209,7 +210,7 @@ def train(cfg: ml_collections.ConfigDict):
 
 
   # Construct loss and optimizer
-  total_energy = make_loss( networks.bosenet, batch_network )
+  total_energy = make_loss(networks.bosenet, batch_network, cfg.system.interaction)
 
 
   # Compute the learning rate

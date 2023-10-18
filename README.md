@@ -30,7 +30,7 @@ The versions specified in the requiriments file are the ones that the tests were
 To install the required python libraries, execute:
 
 ```shell
-pip install -r requiriments
+pip install -r requiriments -f https://storage.googleapis.com/jax-releases/jax_releases.html
 ```
 
 If you have a GPU, and cuda installed, it is recommended to install jaxlib with cuda support. For instance 

@@ -42,7 +42,8 @@ def init_bosenet_params(
   }
 
   # Exponential decay factors
-  params['envelope']['a'] = 0.10*jnp.ones(shape=(np*num_orbitals))
+  # params['envelope']['a'] = 0.10*jnp.ones(shape=(np*num_orbitals))
+  params['envelope']['a'] = 0.10*jnp.ones(shape=(num_orbitals))
 
   # Neural networks weights and biases
   for i in range(len(hidden_dims)):
@@ -68,12 +69,14 @@ def init_bosenet_params(
 
   # Output layer weights and biases
   key, subkey = jax.random.split(key)
-  shape = ( dims_in[-1], np*num_orbitals )
+  # shape = ( dims_in[-1], np*num_orbitals )
+  shape = ( dims_in[-1], num_orbitals )
   scale = jnp.sqrt(float(dims_in[-1]))
   params['orbital']['w'] = jax.random.normal(subkey, shape=shape) / scale
 
   key, subkey = jax.random.split(key)
-  shape = ( np*num_orbitals, )
+  # shape = ( np*num_orbitals, )
+  shape = ( num_orbitals, )
   params['orbital']['b'] = jax.random.normal(subkey, shape=shape)
 
   # Linear combinations coefficients
@@ -126,10 +129,11 @@ def construct_symmetric_features(h_one, h_two):
   Returns: symmetric features for each particle  
   """
 
-  g_one = jnp.mean( h_one, axis=0, keepdims=True )
+#  g_one = jnp.mean( h_one, axis=0, keepdims=True )
   g_two = [ jnp.mean( h_two, axis=0 ) ]
 
-  return jnp.concatenate([h_one-g_one]+g_two, axis=1)
+#  return jnp.concatenate([h_one-g_one]+g_two, axis=1)
+  return jnp.concatenate([h_one]+g_two, axis=1)
 
 
 def linear_layer(x, w, b=None):
@@ -259,22 +263,23 @@ def bosenet(params, x):
   f = construct_input_features(x)
 
   mcm = mcmillan_envelope(f[-1], jnp.ones(1)*0.50) + hardsphere_envelope(f[-1])
-  
+
   orb, env = bosenet_orbital(params, f)
 
   n = orb.shape[0]
 
   #Suposses that orb>0, since orb=sigmoid(h)
-  logphi = jnp.reshape(jnp.log(orb)+env, [n,n,-1])
+  # logphi = jnp.reshape(jnp.log(orb)+env, [n,n,-1])
+  # maxlogphi = jnp.max(logphi, axis=1, keepdims=True)
+  logphi = jnp.log(orb)+env
 
-  maxlogphi = jnp.max(logphi, axis=1, keepdims=True)
+  # phibar = jnp.exp(logphi-maxlogphi)
+  # chibar = jnp.prod(jnp.sum(phibar, axis=1), axis=0)
 
-  phibar = jnp.exp(logphi-maxlogphi)
-  chibar = jnp.prod(jnp.sum(phibar, axis=1), axis=0)
-
-  logchi = jnp.sum(maxlogphi, axis=(0,1))+jnp.log(chibar)
+  # logchi = jnp.sum(maxlogphi, axis=(0,1))+jnp.log(chibar)
+  logchi = jnp.sum(logphi, axis=0)
   maxlogchi = jnp.max(logchi)
-
+  
   zeta = params['omega']*jnp.exp(logchi-maxlogchi)
 
   logprob = mcm[0] + maxlogchi + jnp.log(jnp.abs(jnp.sum(zeta)))
@@ -299,16 +304,17 @@ def bosenet_vmc(params, x):
   n = orb.shape[0]
 
   #Suposses that orb>0, since orb=sigmoid(h)
-  logphi = jnp.reshape(jnp.log(orb)+env, [n,n,-1])
+  # logphi = jnp.reshape(jnp.log(orb)+env, [n,n,-1])
+  # maxlogphi = jnp.max(logphi, axis=1, keepdims=True)
+  logphi = jnp.log(orb)+env #
 
-  maxlogphi = jnp.max(logphi, axis=1, keepdims=True)
+  # phibar = jnp.exp(logphi-maxlogphi)
+  # chibar = jnp.prod(jnp.sum(phibar, axis=1), axis=0)
 
-  phibar = jnp.exp(logphi-maxlogphi)
-  chibar = jnp.prod(jnp.sum(phibar, axis=1), axis=0)
-
-  logchi = jnp.sum(maxlogphi, axis=(0,1))+jnp.log(chibar)
+  # logchi = jnp.sum(maxlogphi, axis=(0,1))+jnp.log(chibar)
+  logchi = jnp.sum(logphi, axis=0) #
   maxlogchi = jnp.max(logchi)
-
+  
   zeta = params['omega']*jnp.exp(logchi-maxlogchi)
 
   logprob = mcm[0] + maxlogchi + jnp.log(jnp.abs(jnp.sum(zeta)))

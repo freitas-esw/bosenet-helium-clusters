@@ -1,10 +1,41 @@
 
 """Evaluating the Hamiltonian on a wavefunction."""
 
-from bnnhc import networks
+from src import networks
 import jax
 from jax import lax
 import jax.numpy as jnp
+
+from typing import Tuple
+
+def features(
+    x: jnp.ndarray,
+    dim: int = 3 
+) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+  """ Construct the vector coordinates and relative vectors
+
+  Args:
+    x: array with a set of particles positions [shape->(np*dim)]
+      
+  Returns:
+    p: array of laboratory coordinates [shape->(np,dim)]
+    r: array of laboratory distances [shape->(np,1)]
+    pp: matrix of relative coordinates for each dimension [shape->(np,np,dim)]
+    dr: matrix of relative distances [shape->(np,np,1)]
+  """
+  
+  p = jnp.reshape(x, [-1, dim])
+  r = jnp.linalg.norm(p, axis=-1, keepdims=True)
+
+  pp = (
+    jnp.reshape(x, [1, -1, dim]) - jnp.reshape(x, [-1, 1, dim]) )
+
+  n = pp.shape[0]
+
+  dr = (
+    jnp.linalg.norm(pp + jnp.eye(n)[..., None], axis=-1) * (1.0 - jnp.eye(n)))
+
+  return p, r, pp, dr
 
 def potential_lj612(dr):
   """
@@ -106,7 +137,7 @@ def local_energy(f, pot_type: str='aziz'):
     Returns:
       local energy, kinetic energy, potential energy
     """
-    _, _, _, r = networks.construct_input_features(x)
+    _, _, _, r = features(x)
     potential = jnp.sum(jnp.triu(potential_energy(r), k=1))
     kinetic = ke(params, x)
         

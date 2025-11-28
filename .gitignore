@@ -1,6 +1,9 @@
 *.pyc
 *.npz
+*.npy
 *.csv
 *.png
+*.svg
 *.out
-
+*.slurm
+*.err

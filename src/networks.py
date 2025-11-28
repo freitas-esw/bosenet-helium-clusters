@@ -3,7 +3,7 @@
 
 from typing import Tuple
 
-from bnnhc import curvature_tags_and_blocks
+from src import curvature_tags_and_blocks
 
 import jax
 import jax.numpy as jnp
@@ -43,6 +43,7 @@ def init_bosenet_params(
 
   # Exponential decay factors
   params['envelope']['a'] = 0.10*jnp.ones(shape=(np*num_orbitals))
+  params['envelope']['b'] = 0.10*jnp.ones(shape=(1,))
 
   # Neural networks weights and biases
   for i in range(len(hidden_dims)):
@@ -87,7 +88,7 @@ def construct_input_features(
     x: jnp.ndarray,
     dim: int = 3 
 ) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
-  """ Construct the input features f^0_i of the network for each 
+  """ Construct the input features for h^0_i and h^0_ij of the network for each 
       particle i
 
   Args:
@@ -258,7 +259,7 @@ def bosenet(params, x):
   
   f = construct_input_features(x)
 
-  mcm = mcmillan_envelope(f[-1], jnp.ones(1)*0.50) + hardsphere_envelope(f[-1])
+  mcm = mcmillan_envelope(f[-1], params['envelope']['b']) + hardsphere_envelope(f[-1])
   
   orb, env = bosenet_orbital(params, f)
 
@@ -292,7 +293,7 @@ def bosenet_vmc(params, x):
 
   f = construct_input_features(x)
 
-  mcm = mcmillan_envelope(f[-1], jnp.ones(1)*0.50)
+  mcm = mcmillan_envelope(f[-1], params['envelope']['b'])
   
   orb, env = bosenet_orbital(params, f)
 

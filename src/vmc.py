@@ -3,6 +3,7 @@
 
 from absl import logging
 
+import os 
 import time
 import chex
 import ml_collections
@@ -12,14 +13,14 @@ import jax.numpy as jnp
 
 import numpy as np
 
-from bnnhc import checkpoint
-from bnnhc import constants
-from bnnhc import networks
-from bnnhc import mcmc
-from bnnhc import hamiltonian
-from bnnhc import writers
+from src import checkpoint
+from src import constants
+from src import networks
+from src import mcmc
+from src import hamiltonian
+from src import writers
 
-from bnnhc.train import AuxiliaryLossData, make_loss
+from src.train import AuxiliaryLossData, make_loss
 
 from kfac_ferminet_alpha import utils as kfac_utils
 
@@ -30,7 +31,7 @@ def vmc(cfg: ml_collections.ConfigDict):
 
   Args:
     cfg: ConfigDict containing all necessary parameters to run the simulation.
-         Check base_config.py for more details.
+         Check base.py for more details.
   """
 
   logging.info('Welcome to Bosenet Helium Cluster VMC simulation!')
@@ -116,6 +117,7 @@ def vmc(cfg: ml_collections.ConfigDict):
     mcmc_width = kfac_utils.replicate_all_local_devices(
         jnp.asarray(cfg.mcmc.width))
   
+  f = open(os.path.join(ckpt_restore_path, 'samples.npy'), 'wb')
 
   with writers.Writer(
       name='vmc_stats',
@@ -143,7 +145,6 @@ def vmc(cfg: ml_collections.ConfigDict):
       #  elif pmove < 0.45:
       #    mcmc_width /= 1.1
 
-
       # Logging
       if t % cfg.log.stats_frequency == 0:
         logging.info(
@@ -158,6 +159,8 @@ def vmc(cfg: ml_collections.ConfigDict):
             potential=np.asarray(potential),
             pmove=np.asarray(pmove))
 
+      if 90*cfg.vmc.iterations <= 100*t:
+        np.save(f, data)
 
   logging.info('The simulation finished!')
 

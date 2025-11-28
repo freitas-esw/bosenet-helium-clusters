@@ -31,7 +31,10 @@ class Writer(contextlib.AbstractContextManager):
     self._schema = schema
     if not os.path.isdir(directory):
       os.mkdir(directory)
-    self._filename = os.path.join(directory, name + '.csv')
+    i = 1
+    while os.path.isfile(os.path.join(directory, name + f'_{i:02d}.csv')) and i < 99: i+=1
+    if i > 99: raise RuntimeError("Directory has too much files.")
+    self._filename = os.path.join(directory, name + f'_{i:02d}.csv')
     self._iteration_key = iteration_key
     self._log = log
 

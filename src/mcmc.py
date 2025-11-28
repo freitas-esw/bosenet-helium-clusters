@@ -5,7 +5,7 @@ NOTE: these functions operate on batches of MCMC configurations and should not
 be vmapped.
 """
 
-from bnnhc import constants
+from src import constants
 import jax
 from jax import lax
 from jax import numpy as jnp

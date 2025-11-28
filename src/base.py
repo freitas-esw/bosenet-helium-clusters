@@ -15,6 +15,7 @@ def default() -> ml_collections.ConfigDict:
   """
   
   cfg = ml_collections.ConfigDict({
+      'method': 'train',   # available options: 'train', 'vmc'
       'batch_size': 8192,  # batch size
 
       # Do *not* override on command-line. Do *not* set using __name__ from 
@@ -79,6 +80,7 @@ def default() -> ml_collections.ConfigDict:
       },
 
       'debug': {
+          'seed': 42,              # seed for deterministic run
           'check_nan': False,      # check loss and parameter 
           'deterministic': False,  # use a deterministic seed
       },

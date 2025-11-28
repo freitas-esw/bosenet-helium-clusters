@@ -12,12 +12,12 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from bnnhc import checkpoint
-from bnnhc import constants
-from bnnhc import networks
-from bnnhc import mcmc
-from bnnhc import hamiltonian
-from bnnhc import writers
+from src import checkpoint
+from src import constants
+from src import networks
+from src import mcmc
+from src import hamiltonian
+from src import writers
 
 from kfac_ferminet_alpha import loss_functions
 from kfac_ferminet_alpha import utils as kfac_utils
@@ -125,7 +125,7 @@ def train(cfg: ml_collections.ConfigDict):
 
   Args:
     cfg: ConfigDict containing all necessary parameters to run the simulation.
-         Check base_config.py for more details.
+         Check base.py for more details.
   """
 
   logging.info('Welcome to BoseNet simulations of clusters!')
@@ -145,7 +145,7 @@ def train(cfg: ml_collections.ConfigDict):
 
   # Set the random number generator seed
   if cfg.debug.deterministic:
-    seed = 42
+    seed = cfg.debug.seed
   else:
     seed = int(1e6 * time.time())
 
@@ -176,6 +176,8 @@ def train(cfg: ml_collections.ConfigDict):
   if ckpt_restore_filename:
     t_init, data, params, opt_state_ckpt, mcmc_width_ckpt = checkpoint.restore(
         ckpt_restore_filename, cfg.batch_size)
+    if ckpt_restore_path:
+      t_init = 0 if ckpt_save_path != ckpt_restore_path else t_init
   else:
     logging.info('No checkpoint found. Training new model.')
     key, subkey = jax.random.split(key)
@@ -303,11 +305,16 @@ def train(cfg: ml_collections.ConfigDict):
 
       # Update MCMC move width
       if t > 0 and t % cfg.mcmc.adapt_frequency == 0:
-        if np.mean(pmoves) > 0.42:
+        if np.mean(pmoves) > 0.50:
           mcmc_width *= 1.05
-        if np.mean(pmoves) < 0.38:
+        if np.mean(pmoves) < 0.45:
           mcmc_width /= 1.05
         pmoves[:] = 0
+      else:
+        if pmove > 0.999:
+          mcmc_width *= 1.1
+        elif pmove < 0.199:
+          mcmc_width /= 1.1
       pmoves[t%cfg.mcmc.adapt_frequency] = pmove
 
       if cfg.debug.check_nan:
@@ -334,6 +341,11 @@ def train(cfg: ml_collections.ConfigDict):
         checkpoint.save(ckpt_save_path, t, data, params, opt_state, mcmc_width)
         time_of_last_ckpt = time.time()
 
+  try:
+    if (t+1) % cfg.log.save_frequency != 0:
+      checkpoint.save(ckpt_save_path, t, data, params, opt_state, mcmc_width)
+  except: 
+    logging.info('Warning: variable t_init larger than cfg.optim.iterations')
 
   logging.info('The simulation finished!')
 

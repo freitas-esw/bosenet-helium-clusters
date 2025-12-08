@@ -14,7 +14,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from src import checkpoint
-from src import constants
+from src import utils
 from src import networks
 from src import mcmc
 from src import hamiltonian
@@ -22,7 +22,7 @@ from src import writers
 
 from src.train import AuxiliaryLossData, make_loss
 
-from kfac_ferminet_alpha import utils as kfac_utils
+#from kfac_ferminet_alpha import utils as kfac_utils
 
 
 def vmc(cfg: ml_collections.ConfigDict):
@@ -68,16 +68,19 @@ def vmc(cfg: ml_collections.ConfigDict):
 
   if ckpt_restore_filename:
     data, params, mcmc_width_ckpt = checkpoint.restore_params(ckpt_restore_filename)
-    mcmc_width_ckpt = kfac_utils.replicate_all_local_devices(mcmc_width_ckpt[0,...])
+    #mcmc_width_ckpt = kfac_utils.replicate_all_local_devices(mcmc_width_ckpt[0,...])
+    mcmc_width_ckpt = utils.replicate(mcmc_width_ckpt[0,...])
     params = jax.tree_map(lambda x: x[0,...], params)
-    params = kfac_utils.replicate_all_local_devices(params)
+    #params = kfac_utils.replicate_all_local_devices(params)
+    params = utils.replicate(params)
   else:
     logging.info('No checkpoint found. Stopping the simulation.')
     raise SystemExit
 
   key, subkey = jax.random.split(key)
   data = jnp.reshape(data, data_shape[0:] + data.shape[2:])
-  data = kfac_utils.broadcast_all_local_devices(data)
+  #data = kfac_utils.broadcast_all_local_devices(data)
+  data = utils.broadcast(data)
   t_init = 0
 
   # Set up logging
@@ -86,7 +89,8 @@ def vmc(cfg: ml_collections.ConfigDict):
 
   # Initialisation done. We now want to have different PRNG streams on each
   # device. Shard the key over devices
-  sharded_key = kfac_utils.make_different_rng_key_on_all_devices(key)
+  #sharded_key = kfac_utils.make_different_rng_key_on_all_devices(key)
+  sharded_key = utils.shard_key(key)
 
 
   # Main VMC simulation
@@ -99,22 +103,24 @@ def vmc(cfg: ml_collections.ConfigDict):
           batch_network,
           cfg.batch_size // num_devices,
           steps = cfg.mcmc.steps)
-  mcmc_step = constants.pmap( mcmc_step, donate_argnums=1 )
+  mcmc_step = utils.pmap( mcmc_step, donate_argnums=1 )
 
 
   # Construct total energy
   total_energy = make_loss(networks.bosenet_vmc, batch_network, cfg.system.interaction)
-  total_energy = constants.pmap(total_energy)
+  total_energy = utils.pmap(total_energy)
 
 
   # Split the RNG keys
-  sharded_key, subkeys = kfac_utils.p_split(sharded_key)
+  #sharded_key, subkeys = kfac_utils.p_split(sharded_key)
+  sharded_key, subkeys = utils.p_split(sharded_key)
 
 
   if mcmc_width_ckpt is not None:
     mcmc_width = mcmc_width_ckpt
   else:
-    mcmc_width = kfac_utils.replicate_all_local_devices(
+    #mcmc_width = kfac_utils.replicate_all_local_devices(
+    mcmc_width = utils.replicate(
         jnp.asarray(cfg.mcmc.width))
   
   f = open(os.path.join(ckpt_restore_path, 'samples.npy'), 'wb')
@@ -126,7 +132,8 @@ def vmc(cfg: ml_collections.ConfigDict):
       iteration_key=None,
       log=False) as writer:
     for t in range(t_init, cfg.vmc.iterations):
-      sharded_key, subkeys = kfac_utils.p_split(sharded_key)
+      #sharded_key, subkeys = kfac_utils.p_split(sharded_key)
+      sharded_key, subkeys = utils.p_split(sharded_key)
       data, pmove = mcmc_step(params, data, subkeys, mcmc_width)
       energy, aux = total_energy(params, data)
 

@@ -4,20 +4,20 @@ Bosonic Neural Networks, or Bosenet for short, is an trial wave function based o
 networks and particullarly adapted for Helium Clusters interacting through the Aziz87
 potential[1].
 
-The main results extracted from this version of the algorithm are reported in "Synergy
+The main results extracted from a version of this algorithm are reported in "Synergy
 between deep neural networks and the variational Monte Carlo method for small \(⁴He<sub>N</sub>\)
-clusters", William Freitas and S.A.Vitiello, arXiv:2302.00599
+clusters", William Freitas and S.A.Vitiello, Quantum 7, 1209 (2023).
 
 ## Intallation of requiriments
 
-The code was mostly tested using `python3.10` and `python3.8`. You also should have installed git.
+The code was mostly tested using `python3.11`. You also should have installed git.
 We recommend the installation of the requiriments inside a python virtual environment.
 For more information visit: https://docs.python.org/3/library/venv.html
 
 First, to create the environment use:
 
 ```shell
-python3.10 -m venv ./venv/bnnhc
+python3.11 -m venv ./venv/bnnhc
 ```
 
 To activate the environment
@@ -30,23 +30,25 @@ The versions specified in the requiriments file are the ones that the tests were
 To install the required python libraries, execute:
 
 ```shell
-pip install -r requiriments -f https://storage.googleapis.com/jax-releases/jax_releases.html
+pip install -r requiriments 
 ```
 
 If you have a GPU, and cuda installed, it is recommended to install jaxlib with cuda support. For instance 
 
 ```shell
-pip install jaxlib==0.1.75+cuda11.cudnn82 -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+pip install -U "jax[cuda12]"==0.5.0
 ```
 
 ## Usage
 
 The example config file is under the `scripts` directory. To see what kind of parameters you can change,
-you should look into the `input.py` file or the `bnnhc/base_config.py` file. Running the codes looks like:
+you should look into the `input.py` file or the `bnnhc/base.py` file. Running the codes looks like:
 
 ```shell
-python3.10 bose.py --config scripts/he02n/input.py
-python3.10 vmcbose.py --config scripts/he02n/input.py
+cd workspace
+python3.11 generate.py
+python3.11 ../main.py --config inputs/opt_00.py
+python3.11 ../main.py --config inputs/opt_00.py --config.method='vmc'
 ```
 
 The first line executes the optimisation process, while the second uses the optimised wave function to
@@ -56,10 +58,10 @@ and `vmc_stats.csv`.
 A simple analysis of the data can be done by executing
 
 ```shell
-cd scripts/he02n/
-python3.10 ../analysis.py
+cd he-droplets-n03
+python3.11 ../analysis.py
 ```
-The outputs are an image called `optimisation.png` and a text file `estimations.out`
+The outputs are images in the `.png` format.
 
 ## Acknowledgements
 

@@ -5,7 +5,7 @@ NOTE: these functions operate on batches of MCMC configurations and should not
 be vmapped.
 """
 
-from src import constants
+from src import utils
 import jax
 from jax import lax
 from jax import numpy as jnp
@@ -88,7 +88,7 @@ def make_mcmc_step(
     data, key, _, num_accepts = lax.fori_loop(0, steps, step_fn,
                                                (data, key, logprob, 0.))
     pmove = jnp.sum(num_accepts) / (steps*batch_per_device)
-    pmove = constants.pmean(pmove)
+    pmove = utils.pmean(pmove)
 
     return data, pmove
 

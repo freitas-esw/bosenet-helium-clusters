@@ -9,7 +9,7 @@ from src import train
 from src import vmc
 from ml_collections.config_flags import config_flags
 
-from jax.config import config
+from jax import config
 config.update("jax_enable_x64", True)
 
 # internal imports

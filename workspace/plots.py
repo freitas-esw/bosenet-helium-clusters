@@ -64,7 +64,7 @@ def read_energy_data(label):
 
 def result_str(value, error):
   d = - int(mt.floor(mt.log10(jnp.abs(error))))
-  e = int(jnp.round(error, d) * 10**d)
+  e = round(jnp.round(error, d) * 10**d)
   v = jnp.round(value , d)
   return f'{v:.{d}f}'+'({:n})'.format(e)
 
